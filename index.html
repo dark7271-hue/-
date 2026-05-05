@@ -84,6 +84,30 @@
       }
     }
 
+
+    // 監聽全域貼上事件
+window.addEventListener('paste', (e) => {
+  // 取得剪貼簿中的項目
+  const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+  
+  for (let index in items) {
+    const item = items[index];
+    
+    // 判斷該項目是否為圖片
+    if (item.kind === 'file' && item.type.startsWith('image/')) {
+      const blob = item.getAsFile();
+      
+      // 呼叫原本處理檔案的函式 (handleFile)
+      handleFile(blob);
+      
+      // 更新 UI 提示文字，讓使用者知道貼上成功
+      fileNameDisplay.innerText = `已從剪貼簿讀取圖片：${blob.name || '貼上的圖片'}`;
+      
+      // 成功讀取後跳出迴圈
+      break; 
+    }
+  }
+});
     // OCR 核心邏輯
     recognizeBtn.addEventListener('click', async () => {
       if (!selectedFile) return;
