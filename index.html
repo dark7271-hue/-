@@ -3,176 +3,238 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>OCR + 翻譯工具</title>
+  <title>OCR 辨識與雲端翻譯工具</title>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  </style>
 </head>
-<body class="bg-slate-50 min-h-screen flex items-center justify-center p-4">
-  <div class="w-full max-w-2xl bg-white rounded-2xl shadow-xl p-8">
-    <h1 class="text-3xl font-bold text-slate-800 mb-6 text-center">圖片辨識與翻譯</h1>
+<body class="bg-slate-50 min-h-screen py-10 px-4">
+  <div class="w-full max-w-2xl mx-auto space-y-6">
+    <!-- 主工具區 -->
+    <div class="bg-white rounded-2xl shadow-xl p-8 border border-slate-100">
+      <h1 class="text-3xl font-bold text-slate-800 mb-2 text-center">OCR 辨識與雲端翻譯</h1>
+      <p class="text-center text-slate-400 text-sm mb-6">資料將同步至 Google Sheets 試算表</p>
 
-    <!-- 上傳區域 -->
-    <div id="dropArea" class="border-4 border-dashed border-slate-200 rounded-xl p-8 flex flex-col items-center justify-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-50 transition-all group">
-      <input id="fileInput" type="file" accept="image/*" class="hidden" />
-      <div class="bg-indigo-100 p-4 rounded-full mb-4 group-hover:scale-110 transition-transform">
-        <svg class="w-8 h-8 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+      <!-- 上傳區域 -->
+      <div id="dropArea" class="border-4 border-dashed border-slate-200 rounded-xl p-8 flex flex-col items-center justify-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-50 transition-all group">
+        <input id="fileInput" type="file" accept="image/*" class="hidden" />
+        <div class="bg-indigo-100 p-4 rounded-full mb-4 group-hover:scale-110 transition-transform">
+          <svg class="w-8 h-8 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+        </div>
+        <p class="text-slate-600 font-medium" id="fileNameDisplay">點擊、拖曳或 Ctrl+V 貼上圖片</p>
       </div>
-      <p class="text-slate-600 font-medium" id="fileNameDisplay">點擊、拖曳或 Ctrl+V 貼上圖片</p>
+
+      <!-- 設定區 -->
+      <div class="mt-6 grid grid-cols-2 gap-4">
+        <label class="flex items-center p-3 border rounded-xl cursor-pointer hover:bg-slate-50 transition-colors">
+          <input id="langToggle" type="checkbox" checked class="w-4 h-4 text-indigo-600 rounded">
+          <span class="ml-3 text-sm font-medium text-slate-700">繁中 + 英文辨識</span>
+        </label>
+        <label class="flex items-center p-3 border rounded-xl cursor-pointer hover:bg-slate-50 transition-colors">
+          <input id="translateToggle" type="checkbox" class="w-4 h-4 text-emerald-600 rounded">
+          <span class="ml-3 text-sm font-medium text-slate-700">辨識後自動翻譯</span>
+        </label>
+      </div>
+
+      <button id="recognizeBtn" class="mt-4 w-full bg-indigo-600 text-white py-4 rounded-xl font-bold hover:bg-indigo-700 disabled:opacity-50 transition-all shadow-lg shadow-indigo-100" disabled>開始執行並同步雲端</button>
+
+      <!-- 進度條 -->
+      <div id="progressWrap" class="mt-6 hidden">
+        <div class="flex justify-between mb-2 text-sm font-medium text-indigo-700">
+          <span id="progressMsg">準備中...</span>
+          <span id="progressPercent">0%</span>
+        </div>
+        <div class="w-full bg-slate-200 rounded-full h-2">
+          <div id="progressBar" class="bg-indigo-600 h-2 rounded-full transition-all" style="width: 0%"></div>
+        </div>
+      </div>
+
+      <!-- 結果區 -->
+      <div class="mt-6 space-y-4">
+        <div>
+          <label class="text-xs font-bold text-slate-400 uppercase tracking-wider">辨識結果</label>
+          <textarea id="resultBox" class="mt-1 w-full h-32 p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm text-slate-700" placeholder="等待辨識..."></textarea>
+        </div>
+        <div id="translateSection" class="hidden">
+          <label class="text-xs font-bold text-emerald-500 uppercase tracking-wider">翻譯結果</label>
+          <textarea id="translateBox" class="mt-1 w-full h-32 p-3 border border-emerald-100 bg-emerald-50 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-sm text-slate-700" placeholder="正在翻譯..."></textarea>
+        </div>
+      </div>
+      
+      <div class="mt-6 flex gap-3">
+        <button id="copyBtn" class="flex-1 bg-slate-800 text-white py-3 rounded-xl font-bold hover:bg-slate-900 transition-all">複製結果</button>
+        <button id="clearBtn" class="px-6 py-3 bg-slate-100 text-slate-500 rounded-xl font-bold hover:bg-slate-200">清除</button>
+      </div>
     </div>
 
-    <!-- 設定開關區 -->
-    <div class="mt-6 grid grid-cols-2 gap-4">
-      <label class="flex items-center p-3 border rounded-xl cursor-pointer hover:bg-slate-50">
-        <input id="langToggle" type="checkbox" checked class="w-4 h-4 text-indigo-600">
-        <span class="ml-3 text-sm font-medium text-slate-700">繁中 + 英文辨識</span>
-      </label>
-      <label class="flex items-center p-3 border rounded-xl cursor-pointer hover:bg-slate-50">
-        <input id="translateToggle" type="checkbox" class="w-4 h-4 text-emerald-600">
-        <span class="ml-3 text-sm font-medium text-slate-700">辨識後自動翻譯</span>
-      </label>
-    </div>
-
-    <button id="recognizeBtn" class="mt-4 w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 disabled:opacity-50 transition-colors shadow-lg shadow-indigo-200" disabled>開始執行</button>
-
-    <!-- 進度條 -->
-    <div id="progressWrap" class="mt-6 hidden">
-      <div class="flex justify-between mb-2">
-        <span class="text-sm font-medium text-indigo-700" id="progressMsg">準備中...</span>
-        <span class="text-sm font-medium text-indigo-700" id="progressPercent">0%</span>
+    <!-- 歷史紀錄區 -->
+    <div class="bg-white rounded-2xl shadow-lg p-6 border border-slate-100">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-bold text-slate-700 flex items-center">
+          <svg class="w-5 h-5 mr-2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+          歷史紀錄 (最近 10 筆)
+        </h2>
+        <button id="clearHistoryBtn" class="text-xs text-red-400 hover:text-red-600 transition-colors">清空本地紀錄</button>
       </div>
-      <div class="w-full bg-slate-200 rounded-full h-2">
-        <div id="progressBar" class="bg-indigo-600 h-2 rounded-full transition-all" style="width: 0%"></div>
+      <div id="historyList" class="space-y-3 max-h-80 overflow-y-auto pr-2">
+        <p class="text-center text-slate-400 text-sm py-4">尚無紀錄</p>
       </div>
-    </div>
-
-    <!-- 結果區 -->
-    <div class="mt-6 space-y-4">
-      <div>
-        <label class="text-xs font-bold text-slate-400 uppercase tracking-wider">辨識結果</label>
-        <textarea id="resultBox" class="mt-1 w-full h-32 p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm text-slate-700" placeholder="..."></textarea>
-      </div>
-      <div id="translateSection" class="hidden">
-        <label class="text-xs font-bold text-emerald-500 uppercase tracking-wider">翻譯結果</label>
-        <textarea id="translateBox" class="mt-1 w-full h-32 p-3 border border-emerald-100 bg-emerald-50 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-sm text-slate-700" placeholder="正在翻譯..."></textarea>
-      </div>
-    </div>
-    
-    <div class="mt-6 flex gap-3">
-      <button id="copyBtn" class="flex-1 bg-slate-800 text-white py-3 rounded-xl font-bold hover:bg-slate-900 transition-colors">複製結果</button>
-      <button id="clearBtn" class="px-6 py-3 bg-slate-100 text-slate-500 rounded-xl font-bold hover:bg-slate-200">清除</button>
     </div>
   </div>
 
   <script>
-    const fileInput = document.getElementById('fileInput');
-    const dropArea = document.getElementById('dropArea');
-    const recognizeBtn = document.getElementById('recognizeBtn');
-    const resultBox = document.getElementById('resultBox');
-    const translateBox = document.getElementById('translateBox');
-    const translateSection = document.getElementById('translateSection');
-    const translateToggle = document.getElementById('translateToggle');
-    const progressWrap = document.getElementById('progressWrap');
-    const progressBar = document.getElementById('progressBar');
-    const progressPercent = document.getElementById('progressPercent');
-    const progressMsg = document.getElementById('progressMsg');
-    const fileNameDisplay = document.getElementById('fileNameDisplay');
-    const copyBtn = document.getElementById('copyBtn');
+    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxjFBm0825t7GKTac1T-FFHBwgeVYZXc3-aUB2wV0N4ofq1OOG3Q9z63PKQQhHEgjOc/exec";
+    
+    const fileInput = document.getElementById('fileInput'), dropArea = document.getElementById('dropArea');
+    const recognizeBtn = document.getElementById('recognizeBtn'), resultBox = document.getElementById('resultBox');
+    const translateBox = document.getElementById('translateBox'), translateSection = document.getElementById('translateSection');
+    const translateToggle = document.getElementById('translateToggle'), progressWrap = document.getElementById('progressWrap');
+    const progressBar = document.getElementById('progressBar'), progressPercent = document.getElementById('progressPercent');
+    const progressMsg = document.getElementById('progressMsg'), fileNameDisplay = document.getElementById('fileNameDisplay');
+    const historyList = document.getElementById('historyList');
 
     let selectedFile = null;
 
-    // 處理上傳邏輯
+    // 1. 雲端同步與本地紀錄邏輯
+    async function saveToHistory(original, translated) {
+      // 存入本地 LocalStorage
+      let history = JSON.parse(localStorage.getItem('ocr_history') || '[]');
+      const newItem = {
+        id: Date.now(),
+        time: new Date().toLocaleString(),
+        original: original.substring(0, 1000),
+        translated: translated ? translated.substring(0, 1000) : null
+      };
+      history.unshift(newItem);
+      history = history.slice(0, 10);
+      localStorage.setItem('ocr_history', JSON.stringify(history));
+      renderHistory();
+
+      // 同步至 Google Sheets
+      try {
+        await fetch(GOOGLE_SCRIPT_URL, {
+          method: "POST",
+          mode: "no-cors", 
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ original, translated: translated || "" })
+        });
+        console.log("Cloud Sync Success");
+      } catch (err) {
+        console.error("Cloud Sync Failed", err);
+      }
+    }
+
+    function renderHistory() {
+      const history = JSON.parse(localStorage.getItem('ocr_history') || '[]');
+      if (history.length === 0) {
+        historyList.innerHTML = `<p class="text-center text-slate-400 text-sm py-4">尚無紀錄</p>`;
+        return;
+      }
+      historyList.innerHTML = history.map(item => `
+        <div class="p-3 bg-slate-50 rounded-lg border border-slate-100 hover:border-indigo-200 transition-colors text-sm group">
+          <div class="flex justify-between text-[10px] text-slate-400 mb-1">
+            <span>${item.time}</span>
+            <button onclick="copyText(\`${item.original.replace(/`/g, '\\`')} ${item.translated ? '\\n\\n翻譯：' + item.translated.replace(/`/g, '\\`') : ''}\`)" class="text-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity">複製內容</button>
+          </div>
+          <p class="text-slate-700 line-clamp-2"><strong>原文：</strong>${item.original}</p>
+          ${item.translated ? `<p class="text-emerald-600 line-clamp-2 italic mt-1"><strong>翻譯：</strong>${item.translated}</p>` : ''}
+        </div>
+      `).join('');
+    }
+
+    window.copyText = (text) => {
+      navigator.clipboard.writeText(text);
+      alert('內容已複製');
+    };
+
+    // 2. 圖片處理
     dropArea.addEventListener('click', () => fileInput.click());
     fileInput.addEventListener('change', (e) => handleFile(e.target.files[0]));
-    
-    // 貼上功能
     window.addEventListener('paste', (e) => {
       const items = (e.clipboardData || e.originalEvent.clipboardData).items;
-      for (let item of items) {
-        if (item.kind === 'file' && item.type.startsWith('image/')) {
-          handleFile(item.getAsFile());
-        }
-      }
+      for (let item of items) if (item.kind === 'file' && item.type.startsWith('image/')) handleFile(item.getAsFile());
     });
 
     function handleFile(file) {
       if (file && file.type.startsWith('image/')) {
         selectedFile = file;
-        fileNameDisplay.innerText = `已選擇圖片：${file.name || '貼上的圖片'}`;
+        fileNameDisplay.innerText = `已選取：${file.name || '剪貼簿圖片'}`;
         recognizeBtn.disabled = false;
       }
     }
 
-    // 翻譯功能函式
     async function translateText(text) {
-      if (!text.trim()) return "";
-      // 簡單判斷：包含中文則轉英，否則轉中
       const isChinese = /[\u4e00-\u9fa5]/.test(text);
       const targetLang = isChinese ? 'en' : 'zh-TW';
-      
       try {
         const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${targetLang}&dt=t&q=${encodeURIComponent(text)}`);
         const data = await res.json();
         return data[0].map(item => item[0]).join('');
-      } catch (err) {
-        return "翻譯出錯，請檢查網路連線。";
-      }
+      } catch { return "翻譯連線失敗"; }
     }
 
-    // 執行按鈕
+    // 3. 核心執行邏輯
     recognizeBtn.addEventListener('click', async () => {
       if (!selectedFile) return;
-      
       recognizeBtn.disabled = true;
       progressWrap.classList.remove('hidden');
-      resultBox.value = '';
-      translateBox.value = '';
-      translateSection.classList.add('hidden');
+      resultBox.value = ''; translateBox.value = ''; translateSection.classList.add('hidden');
       
       const lang = document.getElementById('langToggle').checked ? 'chi_tra+eng' : 'eng';
-
       try {
-        // 1. 辨識
         const { data: { text } } = await Tesseract.recognize(selectedFile, lang, {
           logger: m => {
             if (m.status === 'recognizing text') {
               const p = Math.round(m.progress * 100);
               progressBar.style.width = p + '%';
               progressPercent.innerText = p + '%';
-              progressMsg.innerText = '正在讀取圖片內容...';
+              progressMsg.innerText = '文字辨識中...';
             }
           }
         });
+
+        const finalOriginal = text.trim();
+        resultBox.value = finalOriginal;
         
-        resultBox.value = text.trim();
-        
-        // 2. 判斷是否需要翻譯
-        if (translateToggle.checked && resultBox.value) {
+        let tResult = null;
+        if (translateToggle.checked && finalOriginal) {
+          progressMsg.innerText = '正在雲端翻譯...';
           translateSection.classList.remove('hidden');
-          progressMsg.innerText = '正在翻譯中...';
-          const tResult = await translateText(resultBox.value);
+          tResult = await translateText(finalOriginal);
           translateBox.value = tResult;
         }
+
+        // 儲存並同步至 Google Sheets
+        if (finalOriginal) {
+          progressMsg.innerText = '正在同步至 Google Sheets...';
+          await saveToHistory(finalOriginal, tResult);
+        }
         
-        progressMsg.innerText = '執行完成！';
-      } catch (err) {
-        alert('執行失敗');
-        console.error(err);
-      } finally {
-        recognizeBtn.disabled = false;
+        progressMsg.innerText = '任務完成！資料已存雲端';
+      } catch (err) { 
+        alert('執行失敗，請檢查網路'); 
+      } finally { 
+        recognizeBtn.disabled = false; 
       }
     });
 
-    // 複製與清除
-    copyBtn.addEventListener('click', () => {
+    document.getElementById('copyBtn').addEventListener('click', () => {
       const content = translateToggle.checked && translateBox.value 
-        ? `原文：\n${resultBox.value}\n\n翻譯：\n${translateBox.value}`
-        : resultBox.value;
+        ? `原文：\n${resultBox.value}\n\n翻譯：\n${translateBox.value}` : resultBox.value;
       navigator.clipboard.writeText(content);
-      copyBtn.innerText = '已複製內容！';
-      setTimeout(() => copyBtn.innerText = '複製結果', 2000);
     });
 
     document.getElementById('clearBtn').addEventListener('click', () => location.reload());
+    document.getElementById('clearHistoryBtn').addEventListener('click', () => {
+      if(confirm('確定清除本地紀錄？雲端試算表不會被刪除。')) {
+        localStorage.removeItem('ocr_history');
+        renderHistory();
+      }
+    });
+
+    renderHistory();
   </script>
 </body>
 </html>
