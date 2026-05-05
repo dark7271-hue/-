@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>圖片轉文字（OCR）</title>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.1.1/dist/tesseract.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <style>
+    .drop-active { border-color: #60a5fa; background: rgba(96,165,250,0.03); }
+    .hidden-input { position: absolute; left: -9999px; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen flex items-center justify-center p-6">
+  <div class="w-full max-w-3xl bg-white rounded-xl shadow-lg p-6">
+    <h1 class="text-2xl font-semibold text-gray-800 mb-4">圖片轉文字（OCR）</h1>
+
+    <div id="dropArea"
+         class="border-2 border-dashed border-gray-300 rounded-lg p-6 flex flex-col items-center justify-center text-center cursor-pointer transition-colors"
+         tabindex="0">
+      <input id="fileInput" type="file" accept="image/*" class="hidden-input" />
+      <svg class="w-12 h-12 text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16V4a1 1 0 011-1h8a1 1 0 011 1v12M7 20h10M9 12l3-3 3 3"/></svg>
+      <p class="text-gray-700 mb-2">拖曳圖片到此處，或點擊選擇檔案</p>
+      <p class="text-sm text-gray-500">支援 JPG / PNG / GIF / BMP / WebP</p>
+    </div>
+
+    <div class="mt-5 flex items-center space-x-3">
+      <label class="flex items-center space-x-2 text-sm text-gray-700">
+        <input id="langToggle" type="checkbox" checked class="form-checkbox h-4 w-4 text-indigo-600">
+        <span>使用 繁體中文 + 英文 (chi_tra+eng)</span>
+      </label>
+      <button id="recognizeBtn" class="ml-auto bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-500 disabled:opacity-60" disabled>開始辨識</button>
+    </div>
+
+    <div id="progressWrap" class="mt-4 hidden">
+      <div class="text-sm text-gray-600 mb-1">辨識進度：<span id="progressPercent">0%</span></div>
+      <div class="w-full bg-gray-200 rounded-full h-3">
+        <div id="progressBar" class="h-3 rounded-full bg-indigo-500 w-0"></div>
+      </div>
+      <div class="text-xs text-gray-500 mt-1" id="progressMsg"></div>
+    </div>
+
+    <textarea id="resultBox" placeholder="辨識結果會顯示在這裡..." class="mt-5 w-full min-h-[160px] p-3 border rounded resize-vertical text-sm text-gray-800" readonly></textarea>
+
+    <div class="mt-3 flex justify-end space-x-2">
+      <button id="copyBtn" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-500 disabled:opacity-60" disabled>一鍵複製</button>
+      <button id="clearBtn" class="bg-gray-100 text-gray-700 px-4 py-2 rounded hover:bg-gray-200">清除</button>
+    </div>
+  </div>
+
+  <script>
+    const dropArea = document.getElementById('dropArea');
+    const fileInput = document.getElementById('fileInput');
+    const recognizeBtn = document.getElementById('recognizeBtn');
+    const progressWrap = document.getElementById('progressWrap');
+    const progressBar = document.getElementById('progressBar');
+    const progressPercent = document.getElementById('progressPercent');
+    const progressMsg = document.getElementById('progressMsg');
+    const resultBox = document.getElementById('resultBox');
+    const copyBtn = document.getElementById('copyBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const langToggle = document.getElementById('langToggle');
+
+    let selectedFile = null;
+
+    // Helpers
+    function enableRecognize(enable) {
+      recognizeBtn.disabled = !enable;
+    }
+    function resetProgress() {
+      progressBar.style.width = '0%';
+      progressPercent.textContent = '0%';
+      progressMsg.textContent = '';
+      progressWrap.classList.add('hidden');
+    }
+
+    // Drag & Drop
+    ['dragenter','dragover'].forEach(e => {
+      dropArea.addEventListener(e, (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        dropArea.classList.add('drop-active');
+      });
+    });
+    ['dragleave','drop'].forEach(e => {
+      dropArea.addEventListener(e, (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        dropArea.classList.remove('drop-active');
+      });
+    });
+    dropArea.addEventListener('drop', (ev) => {
+      const dt = ev.dataTransfer;
+      if (dt && dt.files && dt.files.length) handleFile(dt.files[0]);
+    });
+
+    // Click to open file dialog
+    dropArea.addEventListener('click', () => fileInput.click());
+    dropArea.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') fileInput.click(); });
+    fileInput.addEventListener('change', (e) => { if (e.target.files && e.target.files[0]) handleFile(e.target.files[0]); });
+
+    function handleFile(file) {
+      if (!file.type.startsWith('image/')) {
+        alert('請上傳圖片檔案（image/*）');
+        return;
+      }
+      selectedFile = file;
+      enableRecognize(true);
+      resultBox.value = '';
+      copyBtn.disabled = true;
+      resetProgress();
+    }
+
+    // Recognize
+    recognizeBtn.addEventListener('click', async () => {
+      if (!selectedFile) return;
+      recognizeBtn.disabled = true;
+      resultBox.value = '';
+      progressWrap.classList.remove('hidden');
+      progressBar.style.width = '0%';
+      progressPercent.textContent = '0%';
+      progressMsg.textContent = '初始化 OCR...';
+
+      const lang = langToggle.checked ? 'chi_tra+eng' : 'eng';
+      try {
+        const { createWorker } = Tesseract;
+        const worker = createWorker({
+          logger: m => {
+            if (m.status === 'recognizing text' && m.progress != null) {
+              const pct = Math.round(m.progress * 100);
+              progressBar.style.width = pct + '%';
+              progressPercent.textContent = pct + '%';
+              progressMsg.textContent = '辨識中...';
+            } else if (m.status) {
+              progressMsg.textContent = m.status;
+            }
+          }
+        });
+
+        await worker.load();
+        await worker.loadLanguage(lang);
+        await worker.initialize(lang);
+
+        // Convert file to data URL
+        const imgData = await new Promise((res, rej) => {
+          const reader = new FileReader();
+          reader.onerror = rej;
+          reader.onload = () => res(reader.result);
+          reader.readAsDataURL(selectedFile);
+        });
+
+        const { data: { text } } = await worker.recognize(imgData);
+        resultBox.value = text.trim();
+        copyBtn.disabled = !resultBox.value;
+        progressBar.style.width = '100%';
+        progressPercent.textContent = '100%';
+        progressMsg.textContent = '完成';
+        await worker.terminate();
+      } catch (err) {
+        console.error(err);
+        alert('辨識發生錯誤，請查看瀏覽器主控台。');
+      } finally {
+        recognizeBtn.disabled = false;
+      }
+    });
+
+    // Copy
+    copyBtn.addEventListener('click', async () => {
+      if (!resultBox.value) return;
+      try {
+        await navigator.clipboard.writeText(resultBox.value);
+        copyBtn.textContent = '已複製';
+        setTimeout(() => copyBtn.textContent = '一鍵複製', 1500);
+      } catch {
+        // fallback
+        resultBox.select();
+        document.execCommand('copy');
+        copyBtn.textContent = '已複製';
+        setTimeout(() => copyBtn.textContent = '一鍵複製', 1500);
+      }
+    });
+
+    // Clear
+    clearBtn.addEventListener('click', () => {
+      selectedFile = null;
+      fileInput.value = '';
+      resultBox.value = '';
+      copyBtn.disabled = true;
+      enableRecognize(false);
+      resetProgress();
+    });
+
+    // Init
+    resetProgress();
+    enableRecognize(false);
+  </script>
+</body>
+</html>
