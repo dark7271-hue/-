@@ -3,32 +3,36 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>圖片轉文字工具</title>
+  <title>OCR + 翻譯工具</title>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-slate-50 min-h-screen flex items-center justify-center p-4">
   <div class="w-full max-w-2xl bg-white rounded-2xl shadow-xl p-8">
-    <h1 class="text-3xl font-bold text-slate-800 mb-6 text-center">圖片轉文字 (OCR)</h1>
+    <h1 class="text-3xl font-bold text-slate-800 mb-6 text-center">圖片辨識與翻譯</h1>
 
     <!-- 上傳區域 -->
-    <div id="dropArea" class="border-4 border-dashed border-slate-200 rounded-xl p-10 flex flex-col items-center justify-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-50 transition-all group">
+    <div id="dropArea" class="border-4 border-dashed border-slate-200 rounded-xl p-8 flex flex-col items-center justify-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-50 transition-all group">
       <input id="fileInput" type="file" accept="image/*" class="hidden" />
       <div class="bg-indigo-100 p-4 rounded-full mb-4 group-hover:scale-110 transition-transform">
         <svg class="w-8 h-8 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
       </div>
-      <p class="text-slate-600 font-medium" id="fileNameDisplay">點擊或拖曳圖片至此</p>
+      <p class="text-slate-600 font-medium" id="fileNameDisplay">點擊、拖曳或 Ctrl+V 貼上圖片</p>
     </div>
 
-    <!-- 設定與按鈕 -->
-    <div class="mt-6 flex items-center justify-between">
-      <label class="inline-flex items-center cursor-pointer">
-        <input id="langToggle" type="checkbox" checked class="sr-only peer">
-        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-        <span class="ml-3 text-sm font-medium text-slate-700">繁體中文 + 英文</span>
+    <!-- 設定開關區 -->
+    <div class="mt-6 grid grid-cols-2 gap-4">
+      <label class="flex items-center p-3 border rounded-xl cursor-pointer hover:bg-slate-50">
+        <input id="langToggle" type="checkbox" checked class="w-4 h-4 text-indigo-600">
+        <span class="ml-3 text-sm font-medium text-slate-700">繁中 + 英文辨識</span>
       </label>
-      <button id="recognizeBtn" class="bg-indigo-600 text-white px-6 py-2.5 rounded-lg font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" disabled>開始辨識</button>
+      <label class="flex items-center p-3 border rounded-xl cursor-pointer hover:bg-slate-50">
+        <input id="translateToggle" type="checkbox" class="w-4 h-4 text-emerald-600">
+        <span class="ml-3 text-sm font-medium text-slate-700">辨識後自動翻譯</span>
+      </label>
     </div>
+
+    <button id="recognizeBtn" class="mt-4 w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 disabled:opacity-50 transition-colors shadow-lg shadow-indigo-200" disabled>開始執行</button>
 
     <!-- 進度條 -->
     <div id="progressWrap" class="mt-6 hidden">
@@ -36,17 +40,26 @@
         <span class="text-sm font-medium text-indigo-700" id="progressMsg">準備中...</span>
         <span class="text-sm font-medium text-indigo-700" id="progressPercent">0%</span>
       </div>
-      <div class="w-full bg-slate-200 rounded-full h-2.5">
-        <div id="progressBar" class="bg-indigo-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+      <div class="w-full bg-slate-200 rounded-full h-2">
+        <div id="progressBar" class="bg-indigo-600 h-2 rounded-full transition-all" style="width: 0%"></div>
       </div>
     </div>
 
     <!-- 結果區 -->
-    <textarea id="resultBox" class="mt-6 w-full h-48 p-4 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none text-slate-700 leading-relaxed" placeholder="辨識結果將顯示於此..."></textarea>
+    <div class="mt-6 space-y-4">
+      <div>
+        <label class="text-xs font-bold text-slate-400 uppercase tracking-wider">辨識結果</label>
+        <textarea id="resultBox" class="mt-1 w-full h-32 p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm text-slate-700" placeholder="..."></textarea>
+      </div>
+      <div id="translateSection" class="hidden">
+        <label class="text-xs font-bold text-emerald-500 uppercase tracking-wider">翻譯結果</label>
+        <textarea id="translateBox" class="mt-1 w-full h-32 p-3 border border-emerald-100 bg-emerald-50 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-sm text-slate-700" placeholder="正在翻譯..."></textarea>
+      </div>
+    </div>
     
-    <div class="mt-4 flex gap-3">
-      <button id="copyBtn" class="flex-1 bg-emerald-500 text-white py-3 rounded-xl font-bold hover:bg-emerald-600 disabled:opacity-50 transition-colors">一鍵複製</button>
-      <button id="clearBtn" class="px-6 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-colors">清除</button>
+    <div class="mt-6 flex gap-3">
+      <button id="copyBtn" class="flex-1 bg-slate-800 text-white py-3 rounded-xl font-bold hover:bg-slate-900 transition-colors">複製結果</button>
+      <button id="clearBtn" class="px-6 py-3 bg-slate-100 text-slate-500 rounded-xl font-bold hover:bg-slate-200">清除</button>
     </div>
   </div>
 
@@ -55,6 +68,9 @@
     const dropArea = document.getElementById('dropArea');
     const recognizeBtn = document.getElementById('recognizeBtn');
     const resultBox = document.getElementById('resultBox');
+    const translateBox = document.getElementById('translateBox');
+    const translateSection = document.getElementById('translateSection');
+    const translateToggle = document.getElementById('translateToggle');
     const progressWrap = document.getElementById('progressWrap');
     const progressBar = document.getElementById('progressBar');
     const progressPercent = document.getElementById('progressPercent');
@@ -64,95 +80,99 @@
 
     let selectedFile = null;
 
-    // 點擊上傳
+    // 處理上傳邏輯
     dropArea.addEventListener('click', () => fileInput.click());
     fileInput.addEventListener('change', (e) => handleFile(e.target.files[0]));
-
-    // 拖曳上傳
-    dropArea.addEventListener('dragover', (e) => { e.preventDefault(); dropArea.classList.add('bg-indigo-50'); });
-    dropArea.addEventListener('dragleave', () => dropArea.classList.remove('bg-indigo-50'));
-    dropArea.addEventListener('drop', (e) => {
-      e.preventDefault();
-      handleFile(e.dataTransfer.files[0]);
+    
+    // 貼上功能
+    window.addEventListener('paste', (e) => {
+      const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+      for (let item of items) {
+        if (item.kind === 'file' && item.type.startsWith('image/')) {
+          handleFile(item.getAsFile());
+        }
+      }
     });
 
     function handleFile(file) {
       if (file && file.type.startsWith('image/')) {
         selectedFile = file;
-        fileNameDisplay.innerText = `已選擇：${file.name}`;
+        fileNameDisplay.innerText = `已選擇圖片：${file.name || '貼上的圖片'}`;
         recognizeBtn.disabled = false;
       }
     }
 
-
-    // 監聽全域貼上事件
-window.addEventListener('paste', (e) => {
-  // 取得剪貼簿中的項目
-  const items = (e.clipboardData || e.originalEvent.clipboardData).items;
-  
-  for (let index in items) {
-    const item = items[index];
-    
-    // 判斷該項目是否為圖片
-    if (item.kind === 'file' && item.type.startsWith('image/')) {
-      const blob = item.getAsFile();
+    // 翻譯功能函式
+    async function translateText(text) {
+      if (!text.trim()) return "";
+      // 簡單判斷：包含中文則轉英，否則轉中
+      const isChinese = /[\u4e00-\u9fa5]/.test(text);
+      const targetLang = isChinese ? 'en' : 'zh-TW';
       
-      // 呼叫原本處理檔案的函式 (handleFile)
-      handleFile(blob);
-      
-      // 更新 UI 提示文字，讓使用者知道貼上成功
-      fileNameDisplay.innerText = `已從剪貼簿讀取圖片：${blob.name || '貼上的圖片'}`;
-      
-      // 成功讀取後跳出迴圈
-      break; 
+      try {
+        const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${targetLang}&dt=t&q=${encodeURIComponent(text)}`);
+        const data = await res.json();
+        return data[0].map(item => item[0]).join('');
+      } catch (err) {
+        return "翻譯出錯，請檢查網路連線。";
+      }
     }
-  }
-});
-    // OCR 核心邏輯
+
+    // 執行按鈕
     recognizeBtn.addEventListener('click', async () => {
       if (!selectedFile) return;
       
       recognizeBtn.disabled = true;
       progressWrap.classList.remove('hidden');
       resultBox.value = '';
+      translateBox.value = '';
+      translateSection.classList.add('hidden');
       
       const lang = document.getElementById('langToggle').checked ? 'chi_tra+eng' : 'eng';
 
       try {
+        // 1. 辨識
         const { data: { text } } = await Tesseract.recognize(selectedFile, lang, {
           logger: m => {
             if (m.status === 'recognizing text') {
               const p = Math.round(m.progress * 100);
               progressBar.style.width = p + '%';
               progressPercent.innerText = p + '%';
-              progressMsg.innerText = '正在讀取圖片文字...';
-            } else {
-              progressMsg.innerText = '正在初始化引擎...';
+              progressMsg.innerText = '正在讀取圖片內容...';
             }
           }
         });
-        resultBox.value = text;
-        progressMsg.innerText = '辨識完成！';
+        
+        resultBox.value = text.trim();
+        
+        // 2. 判斷是否需要翻譯
+        if (translateToggle.checked && resultBox.value) {
+          translateSection.classList.remove('hidden');
+          progressMsg.innerText = '正在翻譯中...';
+          const tResult = await translateText(resultBox.value);
+          translateBox.value = tResult;
+        }
+        
+        progressMsg.innerText = '執行完成！';
       } catch (err) {
-        alert('辨識失敗，請檢查網路連線');
+        alert('執行失敗');
         console.error(err);
       } finally {
         recognizeBtn.disabled = false;
       }
     });
 
-    // 複製功能
+    // 複製與清除
     copyBtn.addEventListener('click', () => {
-      navigator.clipboard.writeText(resultBox.value);
-      const originalText = copyBtn.innerText;
-      copyBtn.innerText = '已複製！';
-      setTimeout(() => copyBtn.innerText = originalText, 2000);
+      const content = translateToggle.checked && translateBox.value 
+        ? `原文：\n${resultBox.value}\n\n翻譯：\n${translateBox.value}`
+        : resultBox.value;
+      navigator.clipboard.writeText(content);
+      copyBtn.innerText = '已複製內容！';
+      setTimeout(() => copyBtn.innerText = '複製結果', 2000);
     });
 
-    // 清除功能
-    document.getElementById('clearBtn').addEventListener('click', () => {
-      location.reload(); // 最簡單的清除方式
-    });
+    document.getElementById('clearBtn').addEventListener('click', () => location.reload());
   </script>
 </body>
 </html>
