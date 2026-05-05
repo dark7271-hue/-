@@ -112,57 +112,48 @@
     }
 
     // Recognize
-    recognizeBtn.addEventListener('click', async () => {
-      if (!selectedFile) return;
-      recognizeBtn.disabled = true;
-      resultBox.value = '';
-      progressWrap.classList.remove('hidden');
-      progressBar.style.width = '0%';
-      progressPercent.textContent = '0%';
-      progressMsg.textContent = '初始化 OCR...';
-
-      const lang = langToggle.checked ? 'chi_tra+eng' : 'eng';
-      try {
-        const { createWorker } = Tesseract;
-        const worker = createWorker({
-          logger: m => {
-            if (m.status === 'recognizing text' && m.progress != null) {
-              const pct = Math.round(m.progress * 100);
-              progressBar.style.width = pct + '%';
-              progressPercent.textContent = pct + '%';
-              progressMsg.textContent = '辨識中...';
-            } else if (m.status) {
-              progressMsg.textContent = m.status;
-            }
-          }
-        });
-
-        await worker.load();
-        await worker.loadLanguage(lang);
-        await worker.initialize(lang);
-
-        // Convert file to data URL
-        const imgData = await new Promise((res, rej) => {
-          const reader = new FileReader();
-          reader.onerror = rej;
-          reader.onload = () => res(reader.result);
-          reader.readAsDataURL(selectedFile);
-        });
-
-        const { data: { text } } = await worker.recognize(imgData);
-        resultBox.value = text.trim();
-        copyBtn.disabled = !resultBox.value;
-        progressBar.style.width = '100%';
-        progressPercent.textContent = '100%';
-        progressMsg.textContent = '完成';
-        await worker.terminate();
-      } catch (err) {
-        console.error(err);
-        alert('辨識發生錯誤，請查看瀏覽器主控台。');
-      } finally {
-        recognizeBtn.disabled = false;
+// 修改後的辨識邏輯
+recognizeBtn.addEventListener('click', async () => {
+  if (!selectedFile) return;
+  recognizeBtn.disabled = true;
+  resultBox.value = '';
+  progressWrap.classList.remove('hidden');
+  
+  const lang = langToggle.checked ? 'chi_tra+eng' : 'eng';
+  
+  try {
+    // 關鍵修改：使用 Tesseract.recognize 直接處理，或正確 await worker
+    // 這裡示範 v4 之後最穩定的 worker 寫法
+    const worker = await Tesseract.createWorker({
+      logger: m => {
+        if (m.status === 'recognizing text') {
+          const pct = Math.round(m.progress * 100);
+          progressBar.style.width = pct + '%';
+          progressPercent.textContent = pct + '%';
+        }
+        progressMsg.textContent = m.status;
       }
     });
+
+    await worker.loadLanguage(lang);
+    await worker.initialize(lang);
+    
+    const { data: { text } } = await worker.recognize(selectedFile);
+    
+    resultBox.value = text.trim();
+    copyBtn.disabled = !resultBox.value;
+    progressBar.style.width = '100%';
+    progressPercent.textContent = '100%';
+    progressMsg.textContent = '完成';
+    
+    await worker.terminate();
+  } catch (err) {
+    console.error("OCR Error:", err);
+    alert('辨識發生錯誤，請確認網路連線是否正常（需下載語言包）。');
+  } finally {
+    recognizeBtn.disabled = false;
+  }
+});
 
     // Copy
     copyBtn.addEventListener('click', async () => {
